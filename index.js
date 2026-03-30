@@ -1,6 +1,6 @@
 /**
  * Homebridge-Garadget
- * @ Index.js Version 0.0.4
+ * @ Index.js Version 0.0.5
  * @ By xNinjasx
  */
 //sets get json dependent
@@ -25,6 +25,9 @@ function DoorAccessory(log, config) {
   this.deviceID = config["deviceID"]; // Grabs your deviceID
   this.bypass = config["bypass"]; // Bypass trigger
   this.args = config["args"]; // For the bypass onoff state
+  // Optional: Particle credentials for automatic token refresh
+  this.particle_username = config["particle_username"] || null;
+  this.particle_password = config["particle_password"] || null;
   this.services = [];
   //Suppose to set information about Accessory
   this.informationService = new Service.AccessoryInformation()
@@ -53,15 +56,98 @@ function DoorAccessory(log, config) {
   }
 }
 /**
+ * Refreshes the Particle Cloud access token using username/password credentials.
+ * Calls back with (err) — on success, this.access_token is updated in memory.
+ */
+DoorAccessory.prototype.refreshToken = function(callback) {
+  if (!this.particle_username || !this.particle_password) {
+    callback(new Error("No Particle credentials configured for token refresh. Add particle_username and particle_password to config.json."));
+    return;
+  }
+  this.log("Attempting to refresh Particle access token...");
+  request.post({
+    url: 'https://api.particle.io/oauth/token',
+    form: {
+      grant_type: 'password',
+      username: this.particle_username,
+      password: this.particle_password,
+      client_id: 'particle',
+      client_secret: 'particle'
+    }
+  }, function(err, response, body) {
+    if (!err && response.statusCode == 200) {
+      var json = JSON.parse(body);
+      this.access_token = json.access_token;
+      this.log("Access token refreshed successfully.");
+      callback(null);
+    } else {
+      var msg = "Failed to refresh token. Check your particle_username and particle_password in config.json.";
+      this.log(msg);
+      callback(new Error(msg));
+    }
+  }.bind(this));
+};
+/**
+ * Makes a GET request with automatic retry on transient errors.
+ * Retries up to maxRetries times with exponential backoff.
+ * If a 401 is received and credentials are available, attempts a token refresh before retrying.
+ */
+DoorAccessory.prototype.getWithRetry = function(url, maxRetries, callback) {
+  var self = this;
+  var attempt = 0;
+
+  function tryRequest() {
+    request.get({ url: url }, function(err, response, body) {
+      if (!err && response.statusCode == 200) {
+        callback(null, body);
+        return;
+      }
+
+      // Token expired — try to refresh and retry once
+      if (response && response.statusCode == 401) {
+        self.log("Received 401 Unauthorized. Access token may be expired.");
+        self.refreshToken(function(refreshErr) {
+          if (!refreshErr) {
+            // Retry once with updated token in the URL — rebuild URL with new token
+            var refreshedUrl = url.replace(/access_token=[^&]+/, 'access_token=' + self.access_token);
+            request.get({ url: refreshedUrl }, function(err2, response2, body2) {
+              if (!err2 && response2.statusCode == 200) {
+                callback(null, body2);
+              } else {
+                callback(err2 || new Error("Request failed after token refresh (status " + (response2 && response2.statusCode) + ")"));
+              }
+            });
+          } else {
+            self.log("Token refresh failed. Update access_token manually in config.json.");
+            callback(new Error("Token expired and could not be refreshed automatically."));
+          }
+        });
+        return;
+      }
+
+      // Transient error — retry with backoff
+      attempt++;
+      if (attempt <= maxRetries) {
+        var delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+        self.log("Request failed (attempt %s/%s), retrying in %sms: %s", attempt, maxRetries, delay, err || ("status " + (response && response.statusCode)));
+        setTimeout(tryRequest, delay);
+      } else {
+        callback(err || new Error("Request failed after " + maxRetries + " retries (status " + (response && response.statusCode) + ")"));
+      }
+    });
+  }
+
+  tryRequest();
+};
+/**
  * Gets Status of the Garadget
  */
 DoorAccessory.prototype.getState = function(callback) {
     this.log("Getting current state...");
+    var url = this.cloudURL + this.deviceID + '/doorStatus?access_token=' + this.access_token;
 
-    request.get({
-      url: this.cloudURL + this.deviceID + '/doorStatus?access_token=' + this.access_token
-    }, function(err, response, body) {
-      if (!err && response.statusCode == 200) {
+    this.getWithRetry(url, 3, function(err, body) {
+      if (!err) {
         var json = JSON.parse(body);
         var currentState = DoorAccessory.prototype.parseStatus(json.result);
         this.log("Door state is %s", currentState);
@@ -94,11 +180,10 @@ DoorAccessory.prototype.getState = function(callback) {
  */
 DoorAccessory.prototype.getStatebypass = function(callback) {
     this.log("Getting current state...");
+    var url = this.cloudURL + this.deviceID + '/doorStatus?access_token=' + this.access_token;
 
-    request.get({
-      url: this.cloudURL + this.deviceID + '/doorStatus?access_token=' + this.access_token
-    }, function(err, response, body) {
-      if (!err && response.statusCode == 200) {
+    this.getWithRetry(url, 3, function(err, body) {
+      if (!err) {
         var json = JSON.parse(body);
         var state = DoorAccessory.prototype.parseStatus(json.result);
         this.log("Bypass state is %s", state);
@@ -159,6 +244,35 @@ DoorAccessory.prototype.setState = function(state, callback) {
           .setCharacteristic(Characteristic.CurrentDoorState, currentState);
         callback(null); // success
 
+      } else if (response && response.statusCode == 401) {
+
+        this.log("Received 401 Unauthorized when setting state. Attempting token refresh...");
+        this.refreshToken(function(refreshErr) {
+          if (!refreshErr) {
+            // Retry the set with the new token
+            request.post({
+              url: this.cloudURL + this.deviceID + '/setState',
+              form: {
+                access_token: this.access_token,
+                args: doorState
+              }
+            }, function(err2, response2, body2) {
+              if (!err2 && response2.statusCode == 200) {
+                this.log("State change complete after token refresh.");
+                var currentState = (state == Characteristic.TargetDoorState.CLOSED) ? Characteristic.CurrentDoorState.CLOSED : Characteristic.CurrentDoorState.OPEN;
+                this.garageservice.setCharacteristic(Characteristic.CurrentDoorState, currentState);
+                callback(null);
+              } else {
+                this.log("Error setting door state after token refresh: %s", err2);
+                callback(err2 || new Error("Error setting door state."));
+              }
+            }.bind(this));
+          } else {
+            this.log("Token refresh failed. Update access_token manually in config.json.");
+            callback(new Error("Token expired and could not be refreshed."));
+          }
+        }.bind(this));
+
       } else {
 
         this.log("Error '%s' setting door state. Response: %s", err, body);
@@ -194,23 +308,30 @@ DoorAccessory.prototype.setStatebypass = function(state, callback) {
     }.bind(this));
   }
 /**
- * Gets Status of the Garadget
- * If this fails than update your token
- * On the homekit app, you will see the Obstruction Detected = YES
- * This indicates you to update your token
+ * Checks token validity via ObstructionDetected characteristic.
+ * ObstructionDetected = YES only on a genuine 401 Unauthorized response.
+ * Other errors (network issues, server errors) are logged but do not
+ * trigger the "token expired" warning.
  */
 DoorAccessory.prototype.getOD = function(callback) {
     this.log("Get ObstructionDetected...");
-    request.get({
-      url: this.cloudURL + this.deviceID + '/doorStatus?access_token=' + this.access_token
-    }, function(err, response, body) {
-      if (!err && response.statusCode == 200) {
-		this.log("Access Key good...");
+    var url = this.cloudURL + this.deviceID + '/doorStatus?access_token=' + this.access_token;
+
+    this.getWithRetry(url, 2, function(err, body) {
+      if (!err) {
+        this.log("Access Key good...");
         callback(null, 0); // success
       } else {
-        this.log("Error getting state: %s", err);
-        this.log("This means your access token expired. Replace in config.json");
-		callback(null, 1); // failed
+        // getWithRetry only surfaces a 401 as a token expiry error;
+        // transient failures are retried internally and won't reach here
+        // unless all retries are exhausted.
+        if (err.message && err.message.indexOf("Token expired") !== -1) {
+          this.log("Access token has expired. Add particle_username and particle_password to config.json for automatic refresh, or update access_token manually.");
+          callback(null, 1); // ObstructionDetected = YES (token issue)
+        } else {
+          this.log("Transient error checking access token (not a token expiry): %s", err);
+          callback(null, 0); // Don't flag as obstruction for non-auth errors
+        }
       }
     }.bind(this));
   }
