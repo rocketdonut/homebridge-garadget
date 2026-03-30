@@ -7,16 +7,36 @@
   },
 
   "description": "Garadget as an accessory.",
-  "accessories": [{
-    "accessory": "Garadget",
-    "name": "Garage Door",
-    "cloudURL": "https://api.particle.io/v1/devices/",
-    "deviceID": "<<Device ID>>",
-    "access_token": "<<Access Token>>",
-	"bypass": "0",
-	"args": "{STATE}"
-  }],
-  "platforms": [
 
-  ]
+  "accessories": [
+
+    {
+      "_comment": "--- Local MQTT mode (recommended — works without internet) ---",
+      "accessory": "Garadget",
+      "name": "Garage Door",
+      "mqtt_server": "mqtt://192.168.1.100",
+      "mqtt_user": "your_mqtt_username",
+      "mqtt_pass": "your_mqtt_password",
+      "device_name": "MyGarage",
+      "update_interval": 60,
+      "bypass": "0",
+      "args": "{STATE}"
+    },
+
+    {
+      "_comment": "--- Cloud/REST mode (requires Particle token) ---",
+      "accessory": "Garadget",
+      "name": "Garage Door",
+      "cloudURL": "https://api.particle.io/v1/devices/",
+      "deviceID": "<<Device ID>>",
+      "access_token": "<<Access Token>>",
+      "particle_username": "<<Optional: your Particle email for auto token refresh>>",
+      "particle_password": "<<Optional: your Particle password for auto token refresh>>",
+      "bypass": "0",
+      "args": "{STATE}"
+    }
+
+  ],
+
+  "platforms": []
 }
