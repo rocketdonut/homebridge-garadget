@@ -43,12 +43,19 @@ function DoorAccessory(log, config) {
   this.particle_password = config["particle_password"] || null;
 
   this.services = [];
+  this._serialNumber = "Unknown";
+  this._firmwareRevision = "Unknown";
 
+  var self = this;
   this.informationService = new Service.AccessoryInformation()
     .setCharacteristic(Characteristic.Manufacturer, "Garadget")
-    .setCharacteristic(Characteristic.Model, "Photon")
-    .setCharacteristic(Characteristic.SerialNumber, "Unknown")
-    .setCharacteristic(Characteristic.FirmwareRevision, "Unknown");
+    .setCharacteristic(Characteristic.Model, "Photon");
+  this.informationService
+    .getCharacteristic(Characteristic.SerialNumber)
+    .on('get', function(callback) { callback(null, self._serialNumber); });
+  this.informationService
+    .getCharacteristic(Characteristic.FirmwareRevision)
+    .on('get', function(callback) { callback(null, self._firmwareRevision); });
 
   if (this.bypass === "1") {
     this.garageservice = new Service.Switch(this.name);
@@ -135,12 +142,8 @@ DoorAccessory.prototype._initMQTT = function() {
 
     // Update HomeKit accessory info from device config payload
     if (topic === self._configTopic) {
-      if (payload.ver) {
-        self.informationService.setCharacteristic(Characteristic.FirmwareRevision, payload.ver);
-      }
-      if (payload.id) {
-        self.informationService.setCharacteristic(Characteristic.SerialNumber, payload.id);
-      }
+      if (payload.ver) self._firmwareRevision = payload.ver;
+      if (payload.id) self._serialNumber = payload.id;
       return;
     }
 
