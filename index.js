@@ -484,7 +484,7 @@ DoorAccessory.prototype.refreshToken = function(callback) {
 // ---------------------------------------------------------------------------
 
 DoorAccessory.prototype.getServices = function() {
-    var services = [this.garageservice];
+    var services = [this.informationService, this.garageservice];
     if (this.lightService) services.push(this.lightService);
     return services;
   }
