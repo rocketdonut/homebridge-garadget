@@ -47,7 +47,8 @@ function DoorAccessory(log, config) {
   this.informationService = new Service.AccessoryInformation()
     .setCharacteristic(Characteristic.Manufacturer, "Garadget")
     .setCharacteristic(Characteristic.Model, "Photon")
-    .setCharacteristic(Characteristic.SerialNumber, "AABBCCDD1");
+    .setCharacteristic(Characteristic.SerialNumber, "Unknown")
+    .setCharacteristic(Characteristic.FirmwareRevision, "Unknown");
 
   if (this.bypass === "1") {
     this.garageservice = new Service.Switch(this.name);
@@ -101,6 +102,7 @@ DoorAccessory.prototype._initMQTT = function() {
 
   this._statusTopic  = 'garadget/' + this.device_name + '/status';
   this._commandTopic = 'garadget/' + this.device_name + '/command';
+  this._configTopic  = 'garadget/' + this.device_name + '/config';
 
   this.log("Connecting to MQTT broker at %s ...", this.mqtt_server);
   this._mqttClient = mqtt.connect(this.mqtt_server, opts);
@@ -108,13 +110,14 @@ DoorAccessory.prototype._initMQTT = function() {
   this._mqttClient.on('connect', function() {
     self._mqttConnected = true;
     self.log("MQTT connected. Subscribing to %s", self._statusTopic);
-    self._mqttClient.subscribe(self._statusTopic, function(err) {
+    self._mqttClient.subscribe([self._statusTopic, self._configTopic], function(err) {
       if (err) {
         self.log("MQTT subscribe error: %s", err);
       } else {
-        // Request an immediate status update on connect
+        // Request immediate status and config on connect
         self._mqttClient.publish(self._commandTopic, 'get-status');
-        // Then poll on a regular interval
+        self._mqttClient.publish(self._commandTopic, 'get-config');
+        // Then poll status on a regular interval
         self._pollTimer = setInterval(function() {
           self._mqttClient.publish(self._commandTopic, 'get-status');
         }, self.update_interval);
@@ -123,25 +126,38 @@ DoorAccessory.prototype._initMQTT = function() {
   });
 
   this._mqttClient.on('message', function(topic, message) {
-    if (topic !== self._statusTopic) return;
     try {
       var payload = JSON.parse(message.toString());
-      var status = payload.status;
-      self.log("MQTT status update: %s", status);
-      self._cachedState = self._statusToInt(status);
-      // Push the new state to HomeKit immediately
-      self.garageservice
-        .getCharacteristic(Characteristic.CurrentDoorState)
-        .updateValue(self._cachedState);
-      // Update light sensor if enabled
-      if (self.lightService && payload.bright !== undefined) {
-        var lux = Math.max(0.0001, payload.bright);
-        self.lightService
-          .getCharacteristic(Characteristic.CurrentAmbientLightLevel)
-          .updateValue(lux);
-      }
     } catch (e) {
       self.log("MQTT message parse error: %s", e);
+      return;
+    }
+
+    // Update HomeKit accessory info from device config payload
+    if (topic === self._configTopic) {
+      if (payload.ver) {
+        self.informationService.setCharacteristic(Characteristic.FirmwareRevision, payload.ver);
+      }
+      if (payload.id) {
+        self.informationService.setCharacteristic(Characteristic.SerialNumber, payload.id);
+      }
+      return;
+    }
+
+    if (topic !== self._statusTopic) return;
+    var status = payload.status;
+    self.log("MQTT status update: %s", status);
+    self._cachedState = self._statusToInt(status);
+    // Push the new state to HomeKit immediately
+    self.garageservice
+      .getCharacteristic(Characteristic.CurrentDoorState)
+      .updateValue(self._cachedState);
+    // Update light sensor if enabled
+    if (self.lightService && payload.bright !== undefined) {
+      var lux = Math.max(0.0001, payload.bright);
+      self.lightService
+        .getCharacteristic(Characteristic.CurrentAmbientLightLevel)
+        .updateValue(lux);
     }
   });
 
