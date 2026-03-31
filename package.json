@@ -1,19 +1,21 @@
 {
-  "name": "homebridge-garadget",
-  "version": "0.0.4",
-  "description": "Garadget device plugin for Homebridge -- Homekit Integration for Garadget using Homebridge.",
+  "name": "homebridge-garadget-cloudmqtt",
+  "version": "0.1.0",
+  "description": "Garadget plugin for Homebridge with local MQTT and Particle Cloud support.",
   "main": "index.js",
-  "author": "xNinjas",
+  "author": "rocketdonut",
   "license": "ISC",
   "keywords": [
-    "homebridge-plugin"
+    "homebridge-plugin",
+    "garadget",
+    "mqtt"
   ],
   "repository": {
     "type": "git",
-    "url": "git://github.com/xNinjasx/homebridge-garadget.git"
+    "url": "git://github.com/rocketdonut/homebridge-garadget.git"
   },
   "bugs": {
-    "url": "https://github.com/xNinjasx/homebridge-garadget/issues"
+    "url": "https://github.com/rocketdonut/homebridge-garadget/issues"
   },
   "engines": {
     "node": ">=0.12.0",
