@@ -1,6 +1,6 @@
 {
   "name": "homebridge-garadget-cloudmqtt",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Garadget plugin for Homebridge with local MQTT and Particle Cloud support.",
   "main": "index.js",
   "author": "rocketdonut",
