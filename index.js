@@ -23,8 +23,11 @@ function DoorAccessory(log, config) {
   this.bypass = config["bypass"];
   this.args = config["args"];
 
+  // Mode can be set explicitly via schema form, or inferred from presence of mqtt_server
+  var mode = config["mode"] || (config["mqtt_server"] ? "mqtt" : "cloud");
+
   // MQTT config (local mode)
-  this.mqtt_server = config["mqtt_server"] || null;
+  this.mqtt_server = mode === "mqtt" ? (config["mqtt_server"] || null) : null;
   this.mqtt_user = config["mqtt_user"] || null;
   this.mqtt_pass = config["mqtt_pass"] || null;
   this.device_name = config["device_name"] || null;
