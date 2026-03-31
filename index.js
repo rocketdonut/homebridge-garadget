@@ -30,6 +30,7 @@ function DoorAccessory(log, config) {
   this.device_name = config["device_name"] || null;
   // How often (seconds) to request a fresh status from the device. Default 60s.
   this.update_interval = (config["update_interval"] || 60) * 1000;
+  this.light_sensor = config["light_sensor"] || false;
 
   // REST/cloud config
   this.cloudURL = config["cloudURL"];
@@ -63,6 +64,14 @@ function DoorAccessory(log, config) {
     this.garageservice
       .getCharacteristic(Characteristic.ObstructionDetected)
       .on('get', this.getOD.bind(this));
+  }
+
+  // Optional light sensor service (MQTT mode only)
+  if (this.light_sensor && this.mqtt_server) {
+    this.lightService = new Service.LightSensor(this.name + ' Light');
+    this.lightService
+      .getCharacteristic(Characteristic.CurrentAmbientLightLevel)
+      .setProps({ minValue: 0.0001 });
   }
 
   // Start MQTT connection if configured
@@ -121,6 +130,13 @@ DoorAccessory.prototype._initMQTT = function() {
       self.garageservice
         .getCharacteristic(Characteristic.CurrentDoorState)
         .updateValue(self._cachedState);
+      // Update light sensor if enabled
+      if (self.lightService && payload.bright !== undefined) {
+        var lux = Math.max(0.0001, payload.bright);
+        self.lightService
+          .getCharacteristic(Characteristic.CurrentAmbientLightLevel)
+          .updateValue(lux);
+      }
     } catch (e) {
       self.log("MQTT message parse error: %s", e);
     }
@@ -449,7 +465,9 @@ DoorAccessory.prototype.refreshToken = function(callback) {
 // ---------------------------------------------------------------------------
 
 DoorAccessory.prototype.getServices = function() {
-    return [this.garageservice];
+    var services = [this.garageservice];
+    if (this.lightService) services.push(this.lightService);
+    return services;
   }
 
 DoorAccessory.prototype.parseStatus = function(p_status) {

@@ -19,6 +19,7 @@
       "mqtt_pass": "your_mqtt_password",
       "device_name": "MyGarage",
       "update_interval": 60,
+      "light_sensor": false,
       "bypass": "0",
       "args": "{STATE}"
     },
