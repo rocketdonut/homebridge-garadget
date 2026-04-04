@@ -2,7 +2,7 @@
   "pluginAlias": "GaradgetCloudMQTT",
   "pluginType": "accessory",
   "singular": false,
-  "headerDisplay": "Control your Garadget garage door opener via local MQTT (recommended) or Particle Cloud.",
+  "headerDisplay": "Control your Garadget garage door opener via local MQTT (recommended) or Particle Cloud. Fill in only the fields that apply to your chosen mode.",
   "schema": {
     "type": "object",
     "properties": {
@@ -26,62 +26,62 @@
         "title": "MQTT Broker URL",
         "type": "string",
         "placeholder": "mqtt://192.168.1.100",
-        "description": "URL of your local MQTT broker."
+        "description": "MQTT mode only. URL of your local MQTT broker."
       },
       "device_name": {
         "title": "Device Name",
         "type": "string",
         "placeholder": "MyGarage",
-        "description": "The device name configured on the Garadget hardware. Used to build the MQTT topic (garadget/<device_name>/status)."
+        "description": "MQTT mode only. The device name configured on the Garadget hardware. Used to build the MQTT topic (garadget/<device_name>/status)."
       },
       "mqtt_user": {
         "title": "MQTT Username",
         "type": "string",
-        "description": "Leave blank if your broker allows anonymous connections."
+        "description": "MQTT mode only. Leave blank if your broker allows anonymous connections."
       },
       "mqtt_pass": {
         "title": "MQTT Password",
         "type": "string",
-        "description": "Leave blank if your broker allows anonymous connections."
+        "description": "MQTT mode only. Leave blank if your broker allows anonymous connections."
       },
       "update_interval": {
         "title": "Status Poll Interval (seconds)",
         "type": "integer",
         "default": 60,
         "minimum": 10,
-        "description": "How often to request a fresh status from the device. Default is 60 seconds."
+        "description": "MQTT mode only. How often to request a fresh status from the device. Default is 60 seconds."
       },
       "light_sensor": {
         "title": "Enable Light Sensor",
         "type": "boolean",
         "default": false,
-        "description": "Expose the Garadget's built-in light sensor as a HomeKit ambient light sensor."
+        "description": "MQTT mode only. Expose the Garadget's built-in light sensor as a HomeKit ambient light sensor."
       },
       "cloudURL": {
         "title": "Particle Cloud URL",
         "type": "string",
         "default": "https://api.particle.io/v1/devices/",
-        "description": "Particle Cloud API endpoint. Usually does not need to be changed."
+        "description": "Cloud mode only. Particle Cloud API endpoint. Usually does not need to be changed."
       },
       "deviceID": {
         "title": "Device ID",
         "type": "string",
-        "description": "Your Garadget device ID from the Particle Console."
+        "description": "Cloud mode only. Your Garadget device ID from the Particle Console."
       },
       "access_token": {
         "title": "Access Token",
         "type": "string",
-        "description": "Your Particle Cloud access token."
+        "description": "Cloud mode only. Your Particle Cloud access token."
       },
       "particle_username": {
-        "title": "Particle Username (optional)",
+        "title": "Particle Username",
         "type": "string",
-        "description": "Your Particle account email. Used to automatically refresh an expired access token."
+        "description": "Cloud mode only. Optional. Your Particle account email for automatic token refresh."
       },
       "particle_password": {
-        "title": "Particle Password (optional)",
+        "title": "Particle Password",
         "type": "string",
-        "description": "Your Particle account password. Used to automatically refresh an expired access token."
+        "description": "Cloud mode only. Optional. Your Particle account password for automatic token refresh."
       },
       "bypass": {
         "title": "Bypass Mode",
@@ -103,53 +103,17 @@
   "form": [
     "name",
     "mode",
-    {
-      "key": "mqtt_server",
-      "condition": "model.mode === 'mqtt'"
-    },
-    {
-      "key": "device_name",
-      "condition": "model.mode === 'mqtt'"
-    },
-    {
-      "key": "mqtt_user",
-      "condition": "model.mode === 'mqtt'"
-    },
-    {
-      "key": "mqtt_pass",
-      "condition": "model.mode === 'mqtt'",
-      "type": "password"
-    },
-    {
-      "key": "update_interval",
-      "condition": "model.mode === 'mqtt'"
-    },
-    {
-      "key": "light_sensor",
-      "condition": "model.mode === 'mqtt'"
-    },
-    {
-      "key": "cloudURL",
-      "condition": "model.mode === 'cloud'"
-    },
-    {
-      "key": "deviceID",
-      "condition": "model.mode === 'cloud'"
-    },
-    {
-      "key": "access_token",
-      "condition": "model.mode === 'cloud'",
-      "type": "password"
-    },
-    {
-      "key": "particle_username",
-      "condition": "model.mode === 'cloud'"
-    },
-    {
-      "key": "particle_password",
-      "condition": "model.mode === 'cloud'",
-      "type": "password"
-    },
+    "mqtt_server",
+    "device_name",
+    "mqtt_user",
+    { "key": "mqtt_pass", "type": "password" },
+    "update_interval",
+    "light_sensor",
+    "cloudURL",
+    "deviceID",
+    { "key": "access_token", "type": "password" },
+    "particle_username",
+    { "key": "particle_password", "type": "password" },
     "bypass",
     "args"
   ]
