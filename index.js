@@ -70,7 +70,7 @@ function DoorAccessory(log, config) {
       .on('get', this.getState.bind(this));
     this.garageservice
       .getCharacteristic(Characteristic.TargetDoorState)
-      .on('get', this.getState.bind(this))
+      .on('get', this.getTargetState.bind(this))
       .on('set', this.setState.bind(this));
     this.garageservice
       .getCharacteristic(Characteristic.ObstructionDetected)
@@ -92,6 +92,7 @@ function DoorAccessory(log, config) {
     } else {
       this._mqttConnected = false;
       this._cachedState = null; // null = unknown
+      this._targetState = 1;    // assume closed until first status arrives
       this._initMQTT();
     }
   }
@@ -151,6 +152,17 @@ DoorAccessory.prototype._initMQTT = function() {
     var status = payload.status;
     self.log("MQTT status update: %s", status);
     self._cachedState = self._statusToInt(status);
+    // Keep TargetDoorState in sync so HomeKit doesn't think a command is
+    // still pending (a stale target can cause the Home app to re-send
+    // commands, which pulses the relay again and stops the door mid-travel).
+    if (status === 'open' || status === 'opening') {
+      self._targetState = 0;
+    } else if (status === 'closed' || status === 'closing') {
+      self._targetState = 1;
+    }
+    self.garageservice
+      .getCharacteristic(Characteristic.TargetDoorState)
+      .updateValue(self._targetState);
     // Push the new state to HomeKit immediately
     self.garageservice
       .getCharacteristic(Characteristic.CurrentDoorState)
@@ -197,6 +209,16 @@ DoorAccessory.prototype._statusToInt = function(status) {
 DoorAccessory.prototype.getState = function(callback) {
   if (this.mqtt_server) {
     this._getStateMQTT(callback);
+  } else {
+    this._getStateREST(callback);
+  }
+};
+
+DoorAccessory.prototype.getTargetState = function(callback) {
+  if (this.mqtt_server) {
+    // TargetDoorState only accepts OPEN (0) or CLOSED (1). Never return
+    // transitional values like opening/closing here.
+    callback(null, this._targetState);
   } else {
     this._getStateREST(callback);
   }
@@ -252,12 +274,31 @@ DoorAccessory.prototype._setStateMQTT = function(state, callback) {
     callback(new Error("MQTT not connected"));
     return;
   }
+
+  // Ignore redundant commands. Every command pulses the opener's relay, and
+  // a pulse while the door is moving stops it dead. If the door is already
+  // moving toward (or already at) the requested state, do nothing.
+  var current = this._cachedState;
+  if (state === 1 && (current === 1 || current === 3)) {
+    this.log("Ignoring close command: door is already %s.", current === 1 ? "closed" : "closing");
+    this._targetState = 1;
+    callback(null);
+    return;
+  }
+  if (state === 0 && (current === 0 || current === 2)) {
+    this.log("Ignoring open command: door is already %s.", current === 0 ? "open" : "opening");
+    this._targetState = 0;
+    callback(null);
+    return;
+  }
+
   var command;
   switch (state) {
     case 0: command = 'open';  break;
     case 1: command = 'close'; break;
     default: command = 'stop'; break;
   }
+  this._targetState = (state === 0) ? 0 : 1;
   this.log("Publishing MQTT command: %s", command);
   this._mqttClient.publish(this._commandTopic, command, function(err) {
     if (err) {
