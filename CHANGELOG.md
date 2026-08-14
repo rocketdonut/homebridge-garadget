@@ -2,6 +2,10 @@
 
 All notable changes to homebridge-garadget-cloudmqtt.
 
+## 0.1.10
+
+- Added this changelog to the published package so release notes appear in the Homebridge UI.
+
 ## 0.1.9
 
 - Added a sensor blip filter: when a closed door suddenly reports opening, the plugin now waits a few seconds (configurable, default 3) before telling HomeKit. If the door reports closed again within the window, the event is discarded as a sensor glitch. This eliminates phantom "door closed" notifications caused by single-scan sensor dropouts (for example an insect crossing the lens).
