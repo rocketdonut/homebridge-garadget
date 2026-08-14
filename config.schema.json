@@ -57,6 +57,13 @@
         "default": false,
         "description": "MQTT mode only. Expose the Garadget's built-in light sensor as a HomeKit ambient light sensor."
       },
+      "blip_filter": {
+        "title": "Sensor Blip Filter (seconds)",
+        "type": "integer",
+        "default": 3,
+        "minimum": 0,
+        "description": "MQTT mode only. When a closed door suddenly reports opening, wait this many seconds before telling HomeKit. If the door reports closed again within the window, the event is discarded as a sensor glitch (prevents phantom notifications). Set to 0 to disable. Default is 3."
+      },
       "cloudURL": {
         "title": "Particle Cloud URL",
         "type": "string",
@@ -109,6 +116,7 @@
     { "key": "mqtt_pass", "type": "password" },
     "update_interval",
     "light_sensor",
+    "blip_filter",
     "cloudURL",
     "deviceID",
     { "key": "access_token", "type": "password" },

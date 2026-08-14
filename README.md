@@ -84,6 +84,7 @@ The easiest way to configure this plugin is through the Homebridge UI — it wil
 | `mqtt_pass` | No | MQTT password |
 | `update_interval` | No | Seconds between status polls, default `60` |
 | `light_sensor` | No | `true` to expose light sensor in HomeKit |
+| `blip_filter` | No | Seconds to hold a closed-to-opening report before telling HomeKit; discards it if the door reports closed again within the window (filters phantom sensor glitches). Default `3`, `0` disables |
 | `cloudURL` | Cloud | Particle Cloud API URL |
 | `deviceID` | Cloud | Your Garadget device ID |
 | `access_token` | Cloud | Your Particle access token |

@@ -34,6 +34,11 @@ function DoorAccessory(log, config) {
   // How often (seconds) to request a fresh status from the device. Default 60s.
   this.update_interval = (config["update_interval"] || 60) * 1000;
   this.light_sensor = config["light_sensor"] || false;
+  // Hold a closed->opening report this long (seconds) before telling HomeKit.
+  // Filters out single-scan sensor glitches (bug on the lens, bad read) that
+  // show up as closed -> opening -> closed within a couple of seconds.
+  // Set to 0 to disable. Default 3 seconds.
+  this._blipFilterMs = (config["blip_filter"] !== undefined ? config["blip_filter"] : 3) * 1000;
 
   // REST/cloud config
   this.cloudURL = config["cloudURL"];
@@ -151,22 +156,27 @@ DoorAccessory.prototype._initMQTT = function() {
     if (topic !== self._statusTopic) return;
     var status = payload.status;
     self.log("MQTT status update: %s", status);
-    self._cachedState = self._statusToInt(status);
-    // Keep TargetDoorState in sync so HomeKit doesn't think a command is
-    // still pending (a stale target can cause the Home app to re-send
-    // commands, which pulses the relay again and stops the door mid-travel).
-    if (status === 'open' || status === 'opening') {
-      self._targetState = 0;
-    } else if (status === 'closed' || status === 'closing') {
-      self._targetState = 1;
+    var newState = self._statusToInt(status);
+
+    if (self._blipTimer) {
+      // A closed->opening report is on hold. Whatever arrives next decides:
+      // "closed" again means it was a sensor blip, drop it silently;
+      // anything else means the door really is moving, apply it now.
+      clearTimeout(self._blipTimer);
+      self._blipTimer = null;
+      if (newState === 1) {
+        self.log("Suppressed sensor blip (door reported closed again within the hold window).");
+      }
+    } else if (self._blipFilterMs > 0 && self._cachedState === 1 && (newState === 2 || newState === 0)) {
+      self.log("Door reports %s while closed; holding %sms to rule out a sensor blip...", status, self._blipFilterMs);
+      self._blipTimer = setTimeout(function() {
+        self._blipTimer = null;
+        self._applyStatus(status);
+      }, self._blipFilterMs);
+      return;
     }
-    self.garageservice
-      .getCharacteristic(Characteristic.TargetDoorState)
-      .updateValue(self._targetState);
-    // Push the new state to HomeKit immediately
-    self.garageservice
-      .getCharacteristic(Characteristic.CurrentDoorState)
-      .updateValue(self._cachedState);
+
+    self._applyStatus(status);
     // Update light sensor if enabled
     if (self.lightService && payload.bright !== undefined) {
       var lux = Math.max(0.0001, payload.bright);
@@ -189,6 +199,24 @@ DoorAccessory.prototype._initMQTT = function() {
     self._mqttConnected = false;
     self.log("MQTT error: %s", err);
   });
+};
+
+DoorAccessory.prototype._applyStatus = function(status) {
+  this._cachedState = this._statusToInt(status);
+  // Keep TargetDoorState in sync so HomeKit doesn't think a command is
+  // still pending (a stale target can cause the Home app to re-send
+  // commands, which pulses the relay again and stops the door mid-travel).
+  if (status === 'open' || status === 'opening') {
+    this._targetState = 0;
+  } else if (status === 'closed' || status === 'closing') {
+    this._targetState = 1;
+  }
+  this.garageservice
+    .getCharacteristic(Characteristic.TargetDoorState)
+    .updateValue(this._targetState);
+  this.garageservice
+    .getCharacteristic(Characteristic.CurrentDoorState)
+    .updateValue(this._cachedState);
 };
 
 DoorAccessory.prototype._statusToInt = function(status) {
