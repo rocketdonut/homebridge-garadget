@@ -210,37 +210,7 @@ DoorAccessory.prototype._applyStatus = function(status) {
     this._targetState = 0;
   } else if (status === 'closed' || status === 'closing') {
     this._targetState = 1;
-  } else if (status === 'stopped') {
-    // Door is stuck mid-travel. After a failed close the stored target is
-    // still "closed", so another close tap in the Home app writes the same
-    // target value and iOS never delivers it -- the door becomes
-    // uncontrollable from HomeKit while other apps still work. Pointing the
-    // target at "open" makes the next close tap a real change again.
-    this._targetState = 0;
   }
-
-  // Fire a queued reversal once the door finishes its current travel.
-  if (this._pendingCommand) {
-    var pending = this._pendingCommand;
-    if (Date.now() > this._pendingExpires) {
-      this.log("Queued %s command expired without the door settling; dropping it.", pending);
-      this._pendingCommand = null;
-    } else if ((pending === 'close' && status === 'closed') || (pending === 'open' && status === 'open')) {
-      // Door ended up where the queued command wanted it anyway.
-      this._pendingCommand = null;
-    } else if ((pending === 'close' && status === 'open') || (pending === 'open' && status === 'closed')) {
-      this._pendingCommand = null;
-      this._targetState = (pending === 'close') ? 1 : 0;
-      var self = this;
-      this.log("Door finished travel; sending queued %s in 2s.", pending);
-      // Brief settle delay in case the device declared arrival slightly
-      // before the door physically stopped (door motion time set too short).
-      setTimeout(function() {
-        if (self._mqttConnected) self._mqttClient.publish(self._commandTopic, pending);
-      }, 2000);
-    }
-  }
-
   this.garageservice
     .getCharacteristic(Characteristic.TargetDoorState)
     .updateValue(this._targetState);
@@ -333,46 +303,8 @@ DoorAccessory.prototype._setStateMQTT = function(state, callback) {
     return;
   }
 
-  // Ignore redundant commands. Every command pulses the opener's relay, and
-  // a pulse while the door is moving stops it dead. If the door is already
-  // moving toward (or already at) the requested state, do nothing.
-  var current = this._cachedState;
-  if (state === 1 && (current === 1 || current === 3)) {
-    this.log("Ignoring close command: door is already %s.", current === 1 ? "closed" : "closing");
-    this._targetState = 1;
-    this._pendingCommand = null;
-    callback(null);
-    return;
-  }
-  if (state === 0 && (current === 0 || current === 2)) {
-    this.log("Ignoring open command: door is already %s.", current === 0 ? "open" : "opening");
-    this._targetState = 0;
-    this._pendingCommand = null;
-    callback(null);
-    return;
-  }
-
-  // A pulse while the door is moving stops it mid-travel (single-button
-  // openers treat any pulse during motion as "stop"), stranding it half-way.
-  // If asked to reverse direction mid-travel, queue the command and send it
-  // once the door finishes its current travel.
-  if (state === 1 && current === 2) {
-    this.log("Door is still opening; queuing close until it reaches open.");
-    this._pendingCommand = 'close';
-    this._pendingExpires = Date.now() + 45000;
-    this._targetState = 1;
-    callback(null);
-    return;
-  }
-  if (state === 0 && current === 3) {
-    this.log("Door is still closing; queuing open until it reaches closed.");
-    this._pendingCommand = 'open';
-    this._pendingExpires = Date.now() + 45000;
-    this._targetState = 0;
-    callback(null);
-    return;
-  }
-
+  // Every HomeKit command is passed straight through to the device,
+  // exactly like the Garadget app's button. No filtering or queuing.
   var command;
   switch (state) {
     case 0: command = 'open';  break;

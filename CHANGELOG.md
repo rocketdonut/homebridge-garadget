@@ -2,6 +2,11 @@
 
 All notable changes to homebridge-garadget-cloudmqtt.
 
+## 0.1.13
+
+- Reverted all command filtering, suppression, and queuing added in 0.1.8, 0.1.11, and 0.1.12. Every HomeKit command is now passed straight through to the device as a single MQTT message, exactly like the Garadget app's button. These behaviors were added chasing a door-stopping issue whose root cause is still under investigation, and filtering commands based on possibly-stale state could itself swallow legitimate commands.
+- Kept: valid TargetDoorState handling (HomeKit requires open/closed only) and the sensor blip filter from 0.1.9 (disable with `blip_filter: 0` if desired).
+
 ## 0.1.12
 
 - Fixed the door stopping or reversing mid-travel when a command arrives while the door is still moving (for example opening with the wall button, then closing from HomeKit before the door finishes opening). Single-button openers treat any relay pulse during motion as "stop", which stranded the door half-way. The plugin now queues a reversal command until the door finishes its current travel, waits 2 seconds for it to settle, then sends it.
