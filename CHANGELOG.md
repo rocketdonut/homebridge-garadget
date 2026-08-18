@@ -2,6 +2,11 @@
 
 All notable changes to homebridge-garadget-cloudmqtt.
 
+## 0.1.12
+
+- Fixed the door stopping or reversing mid-travel when a command arrives while the door is still moving (for example opening with the wall button, then closing from HomeKit before the door finishes opening). Single-button openers treat any relay pulse during motion as "stop", which stranded the door half-way. The plugin now queues a reversal command until the door finishes its current travel, waits 2 seconds for it to settle, then sends it.
+- Recommended device setting: make sure Door Motion Time in the Garadget app is at least as long as your door's real travel time, since the device declares "open" on that timer.
+
 ## 0.1.11
 
 - Fixed the door becoming uncontrollable from HomeKit after it gets stuck mid-travel. When a close attempt fails and the device reports "stopped", HomeKit's stored target was still "closed", so further close taps were treated as redundant by iOS and never delivered; the Garadget app kept working because it has no stored target. The plugin now resets the target to "open" whenever the door reports "stopped", so the next tap is a real state change and goes through.
