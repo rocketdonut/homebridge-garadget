@@ -210,6 +210,13 @@ DoorAccessory.prototype._applyStatus = function(status) {
     this._targetState = 0;
   } else if (status === 'closed' || status === 'closing') {
     this._targetState = 1;
+  } else if (status === 'stopped') {
+    // Door is stuck mid-travel. After a failed close the stored target is
+    // still "closed", so another close tap in the Home app writes the same
+    // target value and iOS never delivers it -- the door becomes
+    // uncontrollable from HomeKit while other apps still work. Pointing the
+    // target at "open" makes the next close tap a real change again.
+    this._targetState = 0;
   }
   this.garageservice
     .getCharacteristic(Characteristic.TargetDoorState)
