@@ -72,6 +72,32 @@ The easiest way to configure this plugin is through the Homebridge UI — it wil
 }
 ```
 
+### Running both modes at once (cloud fallback)
+
+You can configure two accessories for the same door, one in each mode. The MQTT accessory works entirely on your LAN, and the cloud accessory provides an independent fallback path through Particle Cloud. Give them different names so the two tiles are distinguishable in HomeKit:
+
+```json
+"accessories": [
+  {
+    "accessory": "GaradgetCloudMQTT",
+    "name": "Garage Door",
+    "mode": "mqtt",
+    "mqtt_server": "mqtt://192.168.1.100",
+    "device_name": "MyGarage"
+  },
+  {
+    "accessory": "GaradgetCloudMQTT",
+    "name": "Garage Door Cloud",
+    "mode": "cloud",
+    "cloudURL": "https://api.particle.io/v1/devices/",
+    "deviceID": "your_device_id",
+    "access_token": "your_access_token"
+  }
+]
+```
+
+Set the Garadget device itself to **Cloud + MQTT** mode so both paths stay active.
+
 ### Config options
 
 | Option | Required | Description |
